@@ -1,0 +1,30 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "cppbuild",                      // 用 C/C++ 扩展提供的 “cppbuild” provider
+      "label": "Build Scheduler",              // 任务名字，你随便起
+      "command": "/usr/bin/gcc",                // or 你的 g++ 全路径
+      "args": [
+        "-std=c++20",                          // C++20
+        "-pthread",                            // pthread 支持
+        "-g",                                  // 调试符号
+        "-Wall",                               // 所有警告
+        "-Wextra",
+        "${workspaceFolder}/priority_queue_module.cpp",
+        "-o",
+        "${workspaceFolder}/scheduler"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true                      // 设为默认，Ctrl+Shift+B 就跑它
+      }
+    }
+  ]
+}
