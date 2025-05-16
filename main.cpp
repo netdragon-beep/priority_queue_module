@@ -124,11 +124,13 @@ public:
     }
 
     // 提交任务到调度器
-    void submit(Task task) {
-        if (!queue.push(task)) {
-            std::cerr << "[ERROR] Task " << task.id << " dropped due to overflow\n";
-        }
-    }
+    bool submit(Task task) {
+               bool ok = queue.push(task);
+                if (!ok) {
+                    std::cerr << "[ERROR] Task " << task.id << " dropped due to overflow\n";
+                }
+                return ok;
+            }
 
 private:
     // 工作线程主循环
@@ -164,25 +166,38 @@ private:
 // 示例入口（生产环境请替换）
 //---------------------------------------------------------------------
 int main() {
+    std::cout << "[Main] Scheduler starting with 4 worker threads\n";
     Scheduler sched(4); // 4 个工作线程
 
-    // 提交 20 个示例任务，优先级从 0‑4 轮流分配
+    std::cout << "[Main] Submitting 20 tasks...\n";
+    // 提交 20 个示例任务，优先级从 0-4 轮流分配
     for (int i = 0; i < 20; ++i) {
         Task t{
             .id = i,
             .priority = i % 5, // 示例优先级
             .arrival = std::chrono::steady_clock::now(),
             .work = [i] {
-                std::cout << "Running task " << i << " on thread "
-                          << std::this_thread::get_id() << "\n";
+                std::cout << "[Task] Running task " << i
+                          << " on thread " << std::this_thread::get_id() << "\n";
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::cout << "[Task] Finished task " << i << "\n";
             }
         };
-        sched.submit(t);
+        bool ok = sched.submit(t);
+        if (ok) {
+            std::cout << "[Main] Submitted task " << i
+                      << " (priority=" << t.priority << ")\n";
+        } else {
+            std::cout << "[Main][ERROR] Failed to submit task " << i << "\n";
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
+    std::cout << "[Main] All tasks submitted. Letting scheduler run for 5s...\n";
 
     // 让调度器运行一段时间
     std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    std::cout << "[Main] Time up, exiting now.\n";
     return 0;
 }
+
