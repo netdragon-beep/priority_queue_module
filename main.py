@@ -183,7 +183,7 @@ if __name__ == "__main__":
         time.sleep(0.05)
 
     # 等待任务执行完毕
-    time.sleep(20)
+    time.sleep(5)
     sched.shutdown()
 
     # 输出被抢占和完成的任务情况
