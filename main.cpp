@@ -16,10 +16,10 @@
 // 任务结构定义
 //---------------------------------------------------------------------
 struct Task {
-    int id;                      // 任务唯一标识
-    int priority;                // 0 表示最高优先级
+    int id; // 任务唯一标识
+    int priority; // 0 表示最高优先级
     std::chrono::steady_clock::time_point arrival; // 到达时间，用于老化/FIFO
-    std::function<void()> work;  // 任务执行函数
+    std::function<void()> work; // 任务执行函数
 
     // 用于 std::priority_queue 的比较器（最小堆：优先级小在前，若相等则先到先服务）
     bool operator>(const Task &other) const {
@@ -35,11 +35,12 @@ struct Task {
 class ThreadSafePriorityQueue {
 public:
     explicit ThreadSafePriorityQueue(std::size_t capacity)
-        : max_capacity(capacity) {}
+        : max_capacity(capacity) {
+    }
 
     // 插入任务；队列满时返回 false
     bool push(const Task &task) {
-        std::lock_guard<std::mutex> lock(mtx);
+        std::lock_guard<std::mutex> lock(mtx); //加锁，防止多个线程同时操作 q 队列。
         if (q.size() >= max_capacity) {
             std::cerr << "[WARN] Queue overflow (capacity=" << max_capacity << ")\n";
             return false;
@@ -51,7 +52,7 @@ public:
 
     // 阻塞弹出；当队列已停止且为空时返回 false
     bool pop(Task &task) {
-        std::unique_lock<std::mutex> lock(mtx);
+        std::unique_lock<std::mutex> lock(mtx); //加锁，保护对共享优先队列 q 的访问。
         cv.wait(lock, [this] { return stopped || !q.empty(); });
         if (stopped && q.empty()) return false;
         task = q.top();
@@ -67,19 +68,20 @@ public:
         std::vector<Task> tmp;
         auto now = std::chrono::steady_clock::now();
         while (!q.empty()) {
-            Task t = q.top(); q.pop();
+            Task t = q.top();
+            q.pop();
+            //计算任务等待时间
             auto waited = std::chrono::duration_cast<std::chrono::milliseconds>(now - t.arrival);
             if (waited >= threshold && t.priority > 0) {
                 --t.priority; // 向更高优先级提升一级
             }
             tmp.push_back(t);
         }
-        for (auto &t : tmp) q.push(t);
+        for (auto &t: tmp) q.push(t);
     }
 
     // 停止队列，唤醒所有等待线程
-    void stop() {
-        {
+    void stop() { {
             std::lock_guard<std::mutex> lock(mtx);
             stopped = true;
         }
@@ -93,7 +95,6 @@ private:
 
     std::priority_queue<Task, std::vector<Task>, Compare> q;
     const std::size_t max_capacity;
-
     std::mutex mtx;
     std::condition_variable cv;
     bool stopped{false};
@@ -118,19 +119,19 @@ public:
 
     ~Scheduler() {
         queue.stop();
-        for (auto &t : workers) t.join();
-        stop_monitor = true;
-        if (monitor.joinable()) monitor.join();
+        for (auto &t: workers) t.join(); //阻塞等待每个工作线程执行完毕并退出，确保没有线程悬挂。
+        stop_monitor = true; //使 agingLoop() 循环条件失效，监控线程将会终止。
+        if (monitor.joinable()) monitor.join(); //调用 join() 等待监控线程退出。
     }
 
     // 提交任务到调度器
     bool submit(Task task) {
-               bool ok = queue.push(task);
-                if (!ok) {
-                    std::cerr << "[ERROR] Task " << task.id << " dropped due to overflow\n";
-                }
-                return ok;
-            }
+        bool ok = queue.push(task);
+        if (!ok) {
+            std::cerr << "[ERROR] Task " << task.id << " dropped due to overflow\n";
+        }
+        return ok;
+    }
 
 private:
     // 工作线程主循环
@@ -141,7 +142,7 @@ private:
                 task.work();
             } catch (const std::exception &e) {
                 std::cerr << "[Worker " << idx << "] task " << task.id
-                          << " threw: " << e.what() << "\n";
+                        << " threw: " << e.what() << "\n";
             }
         }
     }
@@ -156,7 +157,6 @@ private:
 
     ThreadSafePriorityQueue queue;
     const std::chrono::milliseconds promote_interval;
-
     std::vector<std::thread> workers;
     std::thread monitor;
     std::atomic<bool> stop_monitor{false};
@@ -167,37 +167,37 @@ private:
 //---------------------------------------------------------------------
 int main() {
     std::cout << "[Main] Scheduler starting with 4 worker threads\n";
-    Scheduler sched(4); // 4 个工作线程
-
+    Scheduler sched(4, 1024, std::chrono::seconds(5)); // 4 个工作线程
     std::cout << "[Main] Submitting 20 tasks...\n";
+
     // 提交 20 个示例任务，优先级从 0-4 轮流分配
     for (int i = 0; i < 20; ++i) {
+        int each_working_time = 1;
         Task t{
             .id = i,
             .priority = i % 5, // 示例优先级
             .arrival = std::chrono::steady_clock::now(),
-            .work = [i] {
-                std::cout << "[Task] Running task " << i
-                          << " on thread " << std::this_thread::get_id() << "\n";
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                std::cout << "[Task] Finished task " << i << "\n";
+            .work = [i,each_working_time] {
+                std::cout << "|----[Task] Running task " << i
+                        << " on thread " << std::this_thread::get_id() << "\n";
+                std::this_thread::sleep_for(std::chrono::seconds(each_working_time)); //休眠 （模拟工作）
+                std::cout << "|----[Task] Finished task " << i << "\n";
             }
         };
         bool ok = sched.submit(t);
         if (ok) {
             std::cout << "[Main] Submitted task " << i
-                      << " (priority=" << t.priority << ")\n";
+                    << " (priority=" << t.priority << ")\n";
         } else {
             std::cout << "[Main][ERROR] Failed to submit task " << i << "\n";
         }
+        //主线程稍作休眠，以控制任务提交的速率，避免一次性提交全部任务。
         std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
-    std::cout << "[Main] All tasks submitted. Letting scheduler run for 5s...\n";
-
+    int wait_time = 30;
+    std::cout << "[Main] All tasks submitted. Letting scheduler run for " << wait_time << "s...\n";
     // 让调度器运行一段时间
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-
+    std::this_thread::sleep_for(std::chrono::seconds(wait_time));
     std::cout << "[Main] Time up, exiting now.\n";
     return 0;
 }
-
